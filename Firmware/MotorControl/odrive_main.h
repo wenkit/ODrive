@@ -70,6 +70,7 @@ struct BoardConfig_t {
     bool enable_can0 = true;
     bool enable_i2c0 = false;
     bool enable_ascii_protocol_on_usb = true;
+    bool enable_ascii_protocol_on_uart = true;
     float max_regen_current = 0.0f;
     float brake_resistance = DEFAULT_BRAKE_RESISTANCE;
     float dc_bus_undervoltage_trip_level = 8.0f;                        //<! [V] minimum voltage below which the motor stops operating

@@ -2,9 +2,6 @@
 #define __INTERFACE_UART_HPP
 
 #ifdef __cplusplus
-#include "fibre/protocol.hpp"
-extern StreamSink* uart_stream_output_ptr;
-
 extern "C" {
 #endif
 
