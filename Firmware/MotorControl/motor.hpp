@@ -81,7 +81,7 @@ public:
         bool acim_autoflux_enable = false;
         float acim_autoflux_attack_gain = 10.0f;
         float acim_autoflux_decay_gain = 1.0f;
-        bool omega_L_FF_enable = false; // enable feedforwards for V_d and V_q for current control
+        bool R_wL_FF_enable = false; // enable feedforwards wL and R terms
         bool bEMF_FF_enable = false;    // enable feedforward for bEMF (torque_constant should be correct!)
 
         // custom property setters

@@ -330,9 +330,11 @@ bool Motor::FOC_current(float Id_des, float Iq_des, float I_phase, float pwm_pha
     float Vd = ictrl.v_current_control_integral_d + Ierr_d * ictrl.p_gain;
     float Vq = ictrl.v_current_control_integral_q + Ierr_q * ictrl.p_gain;
 
-    if (config_.omega_L_FF_enable) {
+    if (config_.R_wL_FF_enable) {
         Vd -= phase_vel * config_.phase_inductance * Iq_des;
         Vq += phase_vel * config_.phase_inductance * Id_des;
+        Vd += config_.phase_resistance * Id_des;
+        Vq += config_.phase_resistance * Iq_des;
     }
 
     if (config_.bEMF_FF_enable) {
