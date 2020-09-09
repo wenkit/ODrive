@@ -61,12 +61,14 @@ using namespace fibre;
 TransferHandle Stm32UartTxStream::start_write(cbufptr_t buffer, Completer<WriteResult>& completer) {
     size_t chunk = std::min(buffer.size(), (size_t)UART_TX_BUFFER_SIZE);
 
-    if (HAL_UART_Transmit_DMA(huart_, const_cast<uint8_t*>(buffer.begin()), chunk) != HAL_OK) {
-        completer.complete({kStreamError, buffer.begin()});
-    }
-
     completer_ = &completer;
     tx_end_ = buffer.begin() + chunk;
+
+    if (HAL_UART_Transmit_DMA(huart_, const_cast<uint8_t*>(buffer.begin()), chunk) != HAL_OK) {
+        completer_ = nullptr;
+        tx_end_ = nullptr;
+        completer.complete({kStreamError, buffer.begin()});
+    }
 
     return reinterpret_cast<TransferHandle>(this);
 }
