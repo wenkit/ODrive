@@ -59,7 +59,13 @@ TransferHandle Stm32UsbTxStream::start_write(cbufptr_t buffer, Completer<WriteRe
         return 0;
     }
 
-    if (buffer.size() > USB_TX_DATA_SIZE) {
+    // Note on MTU: on the physical layer, a full speed device can transmit up
+    // to 64 bytes of payload per bulk package. However a single logical
+    // transfer can consist of multiple 64 byte packets terminated by a 0 byte
+    // packet. Currently we don't implement this segmentation. Therefore we
+    // must ensure that all packets are < 64 bytes, otherwise the host will wait
+    // for more.
+    if (buffer.size() >= USB_TX_DATA_SIZE) {
         completer.complete({kStreamError, buffer.begin()});
         return 0;
     }
@@ -129,13 +135,12 @@ Stm32UsbTxStream usb_native_tx_stream(ODRIVE_IN_EP);
 Stm32UsbRxStream usb_cdc_rx_stream(CDC_OUT_EP);
 Stm32UsbRxStream usb_native_rx_stream(ODRIVE_OUT_EP);
 
-//// This is used by the printf feature. Hence the above statics, and below seemingly random ptr (it's externed)
-//// TODO: fix printf
-//StreamSink* usb_stream_output_ptr = &usb_stream_output;
-
-AsciiProtocol ascii_over_cdc(&usb_cdc_rx_stream, &usb_cdc_tx_stream);
 LegacyProtocolStreamBased fibre_over_cdc(&usb_cdc_rx_stream, &usb_cdc_tx_stream);
-LegacyProtocolPacketBased fibre_over_usb(&usb_native_rx_stream, &usb_native_tx_stream, USB_TX_DATA_SIZE);
+LegacyProtocolPacketBased fibre_over_usb(&usb_native_rx_stream, &usb_native_tx_stream, USB_TX_DATA_SIZE - 1); // See note on MTU above
+
+fibre::AsyncStreamSinkMultiplexer<2> usb_cdc_tx_multiplexer(usb_cdc_tx_stream);
+fibre::BufferedStreamSink<64> usb_cdc_stdout_sink(usb_cdc_tx_multiplexer); // Used in communication.cpp
+AsciiProtocol ascii_over_cdc(&usb_cdc_rx_stream, &usb_cdc_tx_multiplexer);
 
 static void usb_server_thread(void * ctx) {
     (void) ctx;
@@ -158,10 +163,11 @@ static void usb_server_thread(void * ctx) {
 
                 fibre_over_usb.start(Completer<LegacyProtocolPacketBased*, StreamStatus>::get_dummy());
 
-                if (odrv.config_.enable_ascii_protocol_on_usb) {
-                    ascii_over_cdc.start();
-                } else {
+                if (odrv.config_.usb_cdc_protocol == ODrive::STREAM_PROTOCOL_TYPE_FIBRE) {
                     fibre_over_cdc.start(Completer<LegacyProtocolPacketBased*, StreamStatus>::get_dummy());
+                } else if (odrv.config_.usb_cdc_protocol == ODrive::STREAM_PROTOCOL_TYPE_ASCII
+                        || odrv.config_.usb_cdc_protocol == ODrive::STREAM_PROTOCOL_TYPE_ASCII_AND_STDOUT) {
+                    ascii_over_cdc.start();
                 }
             } break;
 

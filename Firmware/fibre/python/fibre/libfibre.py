@@ -10,11 +10,32 @@ import concurrent
 import threading
 import time
 from fibre.utils import Logger, Event
+import platform
 
-lib_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(
-                os.path.realpath(__file__)))), 'cpp', 'libfibre.so')
-lib = windll.LoadLibrary('./libfibre.dll') if os.name == 'nt' else cdll.LoadLibrary(lib_path)
+lib_names = {
+    ('Linux', 'x86_64'): 'libfibre-linux-amd64.so',
+    ('Linux', 'armv7l'): 'libfibre-linux-armhf.so',
+    ('Windows', 'x86_64'): 'libfibre-mingw-amd64.dll'
+}
+
+system_desc = (platform.system(), platform.machine())
+
+lib_dir = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.realpath(__file__)))),
+    'cpp')
+
+def test_path(path):
+    return path if os.path.isfile(path) else None
+
+lib_path = (test_path(os.path.join(lib_dir, 'libfibre.so')) or
+            test_path(os.path.join(lib_dir, 'libfibre.dll')) or
+            (test_path(os.path.join(lib_dir, lib_names[system_desc])) if (system_desc in lib_names) else None))
+
+if lib_path is None:
+    raise ModuleNotFoundError("This package has no precompiled libfibre for your platform ({} {}). "
+        "Go to fibre/cpp/ and run `make` to compile libfibre for your platform.".format(*system_desc))
+
+lib = windll.LoadLibrary(lib_path) if os.name == 'nt' else cdll.LoadLibrary(lib_path)
 
 
 # libfibre definitions --------------------------------------------------------#

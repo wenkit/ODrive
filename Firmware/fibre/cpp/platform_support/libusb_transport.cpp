@@ -559,9 +559,12 @@ void LibusbBulkEndpoint<TRes>::submit_transfer() {
     int result = libusb_submit_transfer(transfer_);
     if (LIBUSB_SUCCESS == result) {
         // ok
+        FIBRE_LOG(T) << "started USB transfer on EP " << as_hex(endpoint_id_);
     } else if (LIBUSB_ERROR_NO_DEVICE == result) {
+        FIBRE_LOG(W) << "couldn't start USB transfer: " << libusb_error_name(result);
         safe_complete(completer_, {kStreamClosed, nullptr});
     } else {
+        FIBRE_LOG(W) << "couldn't start USB transfer: " << libusb_error_name(result);
         safe_complete(completer_, {kStreamError, nullptr});
     }
 }
@@ -583,7 +586,7 @@ void LibusbBulkEndpoint<TRes>::on_transfer_finished() {
                           kStreamError;
 
     (status == kStreamError ? FIBRE_LOG(W) : FIBRE_LOG(T))
-        << "USB transfer finished with " << libusb_error_name(transfer_->status);
+        << "USB transfer on EP " << as_hex(endpoint_id_) << " finished with " << libusb_error_name(transfer_->status);
 
     uint8_t* end = std::max(transfer_->buffer + transfer_->actual_length, transfer_->buffer);
 

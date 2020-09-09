@@ -366,25 +366,30 @@ void LegacyObjectClient::receive_more_json() {
 void LegacyObjectClient::complete(EndpointOperationResult result) {
     op_handle_ = 0;
 
-    // TODO: err handling
-    if (result.status == kStreamCancelled && call_) {
-        auto call = call_;
-        call_ = nullptr;
-        safe_complete(call->completer, {kFibreCancelled, call->rx_buf.end()});
-        delete call;
+    if (result.status == kStreamCancelled) {
+        if (call_) {
+            auto call = call_;
+            call_ = nullptr;
+            safe_complete(call->completer, {kFibreCancelled, call->rx_buf.end()});
+            delete call;
+        }
         return;
-    } else if (result.status == kStreamClosed && call_) {
-        auto call = call_;
-        call_ = nullptr;
-        safe_complete(call->completer, {kFibreClosed, call->rx_buf.end()});
-        delete call;
+    } else if (result.status == kStreamClosed) {
+        if (call_) {
+            auto call = call_;
+            call_ = nullptr;
+            safe_complete(call->completer, {kFibreClosed, call->rx_buf.end()});
+            delete call;
+        }
         return;
     } else if (result.status != kStreamOk) {
         FIBRE_LOG(W) << "endpoint operation failed"; // TODO: add retry logic
-        auto call = call_;
-        call_ = nullptr;
-        safe_complete(call->completer, {kFibreInternalError, call->rx_buf.end()});
-        delete call;
+        if (call_) {
+            auto call = call_;
+            call_ = nullptr;
+            safe_complete(call->completer, {kFibreInternalError, call->rx_buf.end()});
+            delete call;
+        }
         return;
     }
 

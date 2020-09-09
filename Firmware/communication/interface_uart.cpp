@@ -107,17 +107,21 @@ void Stm32UartRxStream::did_receive(uint8_t* buffer, size_t length) {
 Stm32UartTxStream uart_tx_stream(huart_);
 Stm32UartRxStream uart_rx_stream;
 
-AsciiProtocol ascii_over_uart(&uart_rx_stream, &uart_tx_stream);
 LegacyProtocolStreamBased fibre_over_uart(&uart_rx_stream, &uart_tx_stream);
+
+fibre::AsyncStreamSinkMultiplexer<2> uart_tx_multiplexer(uart_tx_stream);
+fibre::BufferedStreamSink<64> uart0_stdout_sink(uart_tx_multiplexer); // Used in communication.cpp
+AsciiProtocol ascii_over_uart(&uart_rx_stream, &uart_tx_multiplexer);
 
 
 static void uart_server_thread(void * ctx) {
     (void) ctx;
 
-    if (odrv.config_.enable_ascii_protocol_on_uart) {
-        ascii_over_uart.start();
-    } else {
+    if (odrv.config_.uart0_protocol == ODrive::STREAM_PROTOCOL_TYPE_FIBRE) {
         fibre_over_uart.start(Completer<LegacyProtocolPacketBased*, StreamStatus>::get_dummy());
+    } else if (odrv.config_.uart0_protocol == ODrive::STREAM_PROTOCOL_TYPE_ASCII
+            || odrv.config_.uart0_protocol == ODrive::STREAM_PROTOCOL_TYPE_ASCII_AND_STDOUT) {
+        ascii_over_uart.start();
     }
 
     for (;;) {

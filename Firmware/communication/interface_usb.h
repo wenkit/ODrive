@@ -1,6 +1,7 @@
 #ifndef __INTERFACE_USB_HPP
 #define __INTERFACE_USB_HPP
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -24,6 +25,12 @@ void start_usb_server(void);
 
 #ifdef __cplusplus
 }
+#endif
+
+
+#ifdef __cplusplus
+#include <fibre/../../stream_utils.hpp>
+extern fibre::BufferedStreamSink<64> usb_cdc_stdout_sink;
 #endif
 
 #endif // __INTERFACE_USB_HPP
