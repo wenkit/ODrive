@@ -533,7 +533,7 @@ extern "C" int main(void) {
     uart_event_queue = osMessageCreate(osMessageQ(uart_event_queue), NULL);
 
     // Create an event queue for USB
-    osMessageQDef(usb_event_queue, 6, uint32_t);
+    osMessageQDef(usb_event_queue, 7, uint32_t);
     usb_event_queue = osMessageCreate(osMessageQ(usb_event_queue), NULL);
 
     osSemaphoreDef(sem_can);

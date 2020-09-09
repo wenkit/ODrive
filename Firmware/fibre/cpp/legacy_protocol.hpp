@@ -33,7 +33,7 @@ public:
     PacketWrapper(AsyncStreamSink* tx_channel)
         : tx_channel_(tx_channel) {}
 
-    TransferHandle start_write(cbufptr_t buffer, Completer<WriteResult>& completer) final;
+    void start_write(cbufptr_t buffer, TransferHandle* handle, Completer<WriteResult>& completer) final;
     void cancel_write(TransferHandle transfer_handle) final;
 
 private:
@@ -62,7 +62,7 @@ public:
     PacketUnwrapper(AsyncStreamSource* rx_channel)
         : rx_channel_(rx_channel) {}
 
-    TransferHandle start_read(bufptr_t buffer, Completer<ReadResult>& completer) final;
+    void start_read(bufptr_t buffer, TransferHandle* handle, Completer<ReadResult>& completer) final;
     void cancel_read(TransferHandle transfer_handle) final;
 
 private:

@@ -18,7 +18,11 @@ using namespace fibre;
 
 /* PacketWrapper -------------------------------------------------------------*/
 
-TransferHandle PacketWrapper::start_write(cbufptr_t buffer, Completer<WriteResult>& completer) {
+void PacketWrapper::start_write(cbufptr_t buffer, TransferHandle* handle, Completer<WriteResult>& completer) {
+    if (handle) {
+        *handle = reinterpret_cast<TransferHandle>(this);
+    }
+
     if (state_ != kStateIdle) {
         completer.complete({kStreamError, buffer.begin()});
     }
@@ -42,9 +46,7 @@ TransferHandle PacketWrapper::start_write(cbufptr_t buffer, Completer<WriteResul
 
     state_ = kStateSendingHeader;
     expected_tx_end_ = header_buf_ + 3;
-    inner_transfer_handle_ = tx_channel_->start_write(header_buf_, *this);
-
-    return reinterpret_cast<TransferHandle>(this);
+    tx_channel_->start_write(header_buf_, &inner_transfer_handle_, *this);
 }
 
 void PacketWrapper::cancel_write(TransferHandle transfer_handle) {
@@ -66,19 +68,19 @@ void PacketWrapper::complete(WriteResult result) {
     }
 
     if (result.end < expected_tx_end_) {
-        inner_transfer_handle_ = tx_channel_->start_write({result.end, expected_tx_end_}, *this);
+        tx_channel_->start_write({result.end, expected_tx_end_}, &inner_transfer_handle_, *this);
         return;
     }
 
     if (state_ == kStateSendingHeader) {
         state_ = kStateSendingPayload;
         expected_tx_end_ = payload_buf_.end();
-        inner_transfer_handle_ = tx_channel_->start_write(payload_buf_, *this);
+        tx_channel_->start_write(payload_buf_, &inner_transfer_handle_, *this);
 
     } else if (state_ == kStateSendingPayload) {
         state_ = kStateSendingTrailer;
         expected_tx_end_ = trailer_buf_ + 2;
-        inner_transfer_handle_ = tx_channel_->start_write(trailer_buf_, *this);
+        tx_channel_->start_write(trailer_buf_, &inner_transfer_handle_, *this);
 
     } else if (state_ == kStateSendingTrailer) {
         state_ = kStateIdle;
@@ -89,7 +91,11 @@ void PacketWrapper::complete(WriteResult result) {
 
 /* PacketUnwrapper -----------------------------------------------------------*/
 
-TransferHandle PacketUnwrapper::start_read(bufptr_t buffer, Completer<ReadResult>& completer) {
+void PacketUnwrapper::start_read(bufptr_t buffer, TransferHandle* handle, Completer<ReadResult>& completer) {
+    if (handle) {
+        *handle = reinterpret_cast<TransferHandle>(this);
+    }
+
     if (state_ != kStateIdle) {
         completer.complete({kStreamError, buffer.begin()});
     }
@@ -99,9 +105,7 @@ TransferHandle PacketUnwrapper::start_read(bufptr_t buffer, Completer<ReadResult
 
     state_ = kStateReceivingHeader;
     expected_rx_end_ = rx_buf_ + 3;
-    inner_transfer_handle_ = rx_channel_->start_read({rx_buf_, expected_rx_end_}, *this);
-
-    return reinterpret_cast<TransferHandle>(this);
+    rx_channel_->start_read({rx_buf_, expected_rx_end_}, &inner_transfer_handle_, *this);
 }
 
 void PacketUnwrapper::cancel_read(TransferHandle transfer_handle) {
@@ -127,7 +131,7 @@ void PacketUnwrapper::complete(ReadResult result) {
     }
 
     if (result.end < expected_rx_end_) {
-        inner_transfer_handle_ = rx_channel_->start_read({result.end, expected_rx_end_}, *this);
+        rx_channel_->start_read({result.end, expected_rx_end_}, &inner_transfer_handle_, *this);
         return;
     }
 
@@ -145,18 +149,18 @@ void PacketUnwrapper::complete(ReadResult result) {
             state_ = kStateReceivingPayload;
             payload_length_ = std::min(payload_buf_.size(), (size_t)rx_buf_[1]);
             expected_rx_end_ = payload_buf_.begin() + payload_length_;
-            inner_transfer_handle_ = rx_channel_->start_read(payload_buf_.take(payload_length_), *this);
+            rx_channel_->start_read(payload_buf_.take(payload_length_), &inner_transfer_handle_, *this);
             return;
         }
 
         // Header was bad: discard the bad header bytes and receive more
         memmove(rx_buf_, rx_buf_ + n_discard, sizeof(rx_buf_) - n_discard);
-        inner_transfer_handle_ = rx_channel_->start_read(bufptr_t{rx_buf_}.skip(3 - n_discard), *this);
+        rx_channel_->start_read(bufptr_t{rx_buf_}.skip(3 - n_discard), &inner_transfer_handle_, *this);
 
     } else if (state_ == kStateReceivingPayload) {
         expected_rx_end_ = rx_buf_ + 2;
         state_ = kStateReceivingTrailer;
-        inner_transfer_handle_ = rx_channel_->start_read({rx_buf_, expected_rx_end_}, *this);
+        rx_channel_->start_read({rx_buf_, expected_rx_end_}, &inner_transfer_handle_, *this);
 
     } else if (state_ == kStateReceivingTrailer) {
         uint16_t crc = calc_crc16<CANONICAL_CRC16_POLYNOMIAL>(CANONICAL_CRC16_INIT, payload_buf_.begin(), payload_length_);
@@ -168,7 +172,7 @@ void PacketUnwrapper::complete(ReadResult result) {
         } else {
             state_ = kStateReceivingHeader;
             expected_rx_end_ = rx_buf_ + 3;
-            inner_transfer_handle_ = rx_channel_->start_read({rx_buf_, expected_rx_end_}, *this);
+            rx_channel_->start_read({rx_buf_, expected_rx_end_}, &inner_transfer_handle_, *this);
         }
     }
 }
@@ -254,7 +258,7 @@ void LegacyProtocolPacketBased::start_endpoint_operation(EndpointOperation op) {
 
     expected_acks_[op.seqno] = op;
     transmitting_op_ = op.seqno | 0xffff0000;
-    tx_handle_ = tx_channel_->start_write(cbufptr_t{tx_buf_}.take(8 + op.tx_buf.size()), *static_cast<WriteCompleter*>(this));
+    tx_channel_->start_write(cbufptr_t{tx_buf_}.take(8 + op.tx_buf.size()), &tx_handle_, *static_cast<WriteCompleter*>(this));
 }
 
 
@@ -368,7 +372,7 @@ void LegacyProtocolPacketBased::on_write_finished(WriteResult result) {
 }
 
 void LegacyProtocolPacketBased::on_read_finished(ReadResult result) {
-    // TODO: handle closed
+    TransferHandle dummy;
 
     if (result.status == kStreamClosed) {
         FIBRE_LOG(D) << "RX stream closed.";
@@ -421,7 +425,7 @@ void LegacyProtocolPacketBased::on_read_finished(ReadResult result) {
 #ifdef FIBRE_ENABLE_SERVER
         if (rx_buf.size() < 6) {
             FIBRE_LOG(W) << "packet too short";
-            rx_channel_->start_read(rx_buf_, *static_cast<ReadCompleter*>(this));
+            rx_channel_->start_read(rx_buf_, &dummy, *static_cast<ReadCompleter*>(this));
             return;
         }
 
@@ -447,7 +451,7 @@ void LegacyProtocolPacketBased::on_read_finished(ReadResult result) {
         uint16_t actual_trailer = *(rx_buf.end() - 2) | (*(rx_buf.end() - 1) << 8);
         if (expected_trailer != actual_trailer) {
             FIBRE_LOG(D) << "trailer mismatch for endpoint " << endpoint_id << ": expected " << as_hex(expected_trailer) << ", got " << as_hex(actual_trailer);
-            rx_channel_->start_read(rx_buf_, *static_cast<ReadCompleter*>(this));
+            rx_channel_->start_read(rx_buf_, &dummy, *static_cast<ReadCompleter*>(this));
             return;
         }
         FIBRE_LOG(D) << "trailer ok for endpoint " << endpoint_id;
@@ -470,14 +474,14 @@ void LegacyProtocolPacketBased::on_read_finished(ReadResult result) {
             write_le<uint16_t>(seq_no.value() | 0x8000, tx_buf_);
 
             FIBRE_LOG(D) << "send packet: " << as_hex(cbufptr_t{tx_buf_, actual_response_length});
-            tx_handle_ = tx_channel_->start_write({tx_buf_, actual_response_length}, *static_cast<WriteCompleter*>(this));
+            tx_channel_->start_write({tx_buf_, actual_response_length}, &tx_handle_, *static_cast<WriteCompleter*>(this));
         }
 #else
         FIBRE_LOG(W) << "received request but server support is not compiled in";
 #endif
     }
 
-    rx_channel_->start_read(rx_buf_, *static_cast<ReadCompleter*>(this));
+    rx_channel_->start_read(rx_buf_, &dummy, *static_cast<ReadCompleter*>(this));
 }
 
 void LegacyProtocolPacketBased::on_closed(StreamStatus status) {
@@ -505,7 +509,8 @@ void LegacyProtocolPacketBased::start(Completer<LegacyObjectClient*, std::shared
 void LegacyProtocolPacketBased::start(Completer<LegacyProtocolPacketBased*, StreamStatus>& on_stopped) {
 #endif
     on_stopped_ = &on_stopped;
-    rx_channel_->start_read(rx_buf_, *static_cast<ReadCompleter*>(this));
+    TransferHandle dummy;
+    rx_channel_->start_read(rx_buf_, &dummy, *static_cast<ReadCompleter*>(this));
 
 #if FIBRE_ENABLE_CLIENT
     if (on_stopped_) {

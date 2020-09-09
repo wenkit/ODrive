@@ -76,7 +76,7 @@ public:
     bool deinit();
 
 protected:
-    TransferHandle start_transfer(bufptr_t buffer, Completer<TRes>& completer);
+    void start_transfer(bufptr_t buffer, TransferHandle* handle, Completer<TRes>& completer);
     void cancel_transfer(TransferHandle transfer_handle);
 
 private:
@@ -91,8 +91,8 @@ private:
 
 class FIBRE_PRIVATE LibusbBulkInEndpoint : public LibusbBulkEndpoint<ReadResult>, public AsyncStreamSource {
 public:
-    TransferHandle start_read(bufptr_t buffer, Completer<ReadResult>& completer) final {
-        return start_transfer(buffer, completer);
+    void start_read(bufptr_t buffer, TransferHandle* handle, Completer<ReadResult>& completer) final {
+        start_transfer(buffer, handle, completer);
     }
 
     void cancel_read(TransferHandle transfer_handle) final {
@@ -102,11 +102,11 @@ public:
 
 class FIBRE_PRIVATE LibusbBulkOutEndpoint : public LibusbBulkEndpoint<WriteResult>, public AsyncStreamSink {
 public:
-    TransferHandle start_write(cbufptr_t buffer, Completer<WriteResult>& completer) final {
-        return start_transfer({
+    void start_write(cbufptr_t buffer, TransferHandle* handle, Completer<WriteResult>& completer) final {
+        start_transfer({
             (unsigned char*)buffer.begin(),
             buffer.size()
-        }, completer);
+        }, handle, completer);
     }
 
     void cancel_write(TransferHandle transfer_handle) final {

@@ -520,16 +520,21 @@ bool LibusbBulkEndpoint<TRes>::deinit() {
 }
 
 template<typename TRes>
-TransferHandle LibusbBulkEndpoint<TRes>::start_transfer(bufptr_t buffer, Completer<TRes>& completer) {
+void LibusbBulkEndpoint<TRes>::start_transfer(bufptr_t buffer, TransferHandle* handle, Completer<TRes>& completer) {
+    if (handle) {
+        *handle = reinterpret_cast<TransferHandle>(this);
+    }
+
     if (completer_) {
         FIBRE_LOG(E) << "transfer already in progress";
-        return 0;
+        completer.complete({kStreamError, nullptr});
+        return;
     }
 
     if (!handle_) {
         FIBRE_LOG(E) << "device not open";
         completer.complete({kStreamError, nullptr});
-        return 0;
+        return;
     }
 
     //FIBRE_LOG(D) << "transfer of size " << buffer.size();
@@ -541,7 +546,6 @@ TransferHandle LibusbBulkEndpoint<TRes>::start_transfer(bufptr_t buffer, Complet
 
     completer_ = &completer;
     submit_transfer();
-    return 0;
 }
 
 template<typename TRes>

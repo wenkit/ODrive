@@ -25,7 +25,7 @@ class Stm32UsbTxStream : public AsyncStreamSink {
 public:
     Stm32UsbTxStream(uint8_t endpoint_num) : endpoint_num_(endpoint_num) {}
 
-    TransferHandle start_write(cbufptr_t buffer, Completer<WriteResult>& completer) final;
+    void start_write(cbufptr_t buffer, TransferHandle* handle, Completer<WriteResult>& completer) final;
     void cancel_write(TransferHandle transfer_handle) final;
     void did_finish();
 
@@ -39,7 +39,7 @@ class Stm32UsbRxStream : public AsyncStreamSource {
 public:
     Stm32UsbRxStream(uint8_t endpoint_num) : endpoint_num_(endpoint_num) {}
 
-    TransferHandle start_read(bufptr_t buffer, Completer<ReadResult>& completer) final;
+    void start_read(bufptr_t buffer, TransferHandle* handle, Completer<ReadResult>& completer) final;
     void cancel_read(TransferHandle transfer_handle) final;
     void did_finish();
     
@@ -53,10 +53,14 @@ public:
 
 using namespace fibre;
 
-TransferHandle Stm32UsbTxStream::start_write(cbufptr_t buffer, Completer<WriteResult>& completer) {
+void Stm32UsbTxStream::start_write(cbufptr_t buffer, TransferHandle* handle, Completer<WriteResult>& completer) {
+    if (handle) {
+        *handle = reinterpret_cast<TransferHandle>(this);
+    }
+
     if (!connected_) {
         completer.complete({kStreamClosed, buffer.begin()});
-        return 0;
+        return;
     }
 
     // Note on MTU: on the physical layer, a full speed device can transmit up
@@ -67,12 +71,12 @@ TransferHandle Stm32UsbTxStream::start_write(cbufptr_t buffer, Completer<WriteRe
     // for more.
     if (buffer.size() >= USB_TX_DATA_SIZE) {
         completer.complete({kStreamError, buffer.begin()});
-        return 0;
+        return;
     }
 
     if (completer_ || tx_end_) {
         completer.complete({kStreamError, buffer.begin()});
-        return 0;
+        return;
     }
 
     completer_ = &completer;
@@ -81,10 +85,7 @@ TransferHandle Stm32UsbTxStream::start_write(cbufptr_t buffer, Completer<WriteRe
     if (CDC_Transmit_FS(const_cast<uint8_t*>(buffer.begin()), buffer.size(), endpoint_num_) != USBD_OK) {
         tx_end_ = nullptr;
         safe_complete(completer_, {kStreamError, buffer.begin()});
-        return 0;
     }
-
-    return reinterpret_cast<TransferHandle>(this);
 }
 
 void Stm32UsbTxStream::cancel_write(TransferHandle transfer_handle) {
@@ -97,15 +98,19 @@ void Stm32UsbTxStream::did_finish() {
     safe_complete(completer_, {connected_ ? kStreamOk : kStreamClosed, tx_end});
 }
 
-TransferHandle Stm32UsbRxStream::start_read(bufptr_t buffer, Completer<ReadResult>& completer) {
+void Stm32UsbRxStream::start_read(bufptr_t buffer, TransferHandle* handle, Completer<ReadResult>& completer) {
+    if (handle) {
+        *handle = reinterpret_cast<TransferHandle>(this);
+    }
+
     if (!connected_) {
         completer.complete({kStreamClosed, buffer.begin()});
-        return 0;
+        return;
     }
 
     if (completer_ || rx_end_) {
         completer.complete({kStreamError, buffer.begin()});
-        return 0;
+        return;
     }
 
     completer_ = &completer;
@@ -114,10 +119,8 @@ TransferHandle Stm32UsbRxStream::start_read(bufptr_t buffer, Completer<ReadResul
     if (USBD_CDC_ReceivePacket(&usb_dev_handle, buffer.begin(), buffer.size(), endpoint_num_) != USBD_OK) {
         rx_end_ = nullptr;
         safe_complete(completer_, {kStreamError, buffer.begin()});
-        return 0;
+        return;
     }
-
-    return reinterpret_cast<TransferHandle>(this);
 }
 
 void Stm32UsbRxStream::cancel_read(TransferHandle transfer_handle) {
@@ -141,6 +144,8 @@ LegacyProtocolPacketBased fibre_over_usb(&usb_native_rx_stream, &usb_native_tx_s
 fibre::AsyncStreamSinkMultiplexer<2> usb_cdc_tx_multiplexer(usb_cdc_tx_stream);
 fibre::BufferedStreamSink<64> usb_cdc_stdout_sink(usb_cdc_tx_multiplexer); // Used in communication.cpp
 AsciiProtocol ascii_over_cdc(&usb_cdc_rx_stream, &usb_cdc_tx_multiplexer);
+
+bool usb_cdc_stdout_pending = false;
 
 static void usb_server_thread(void * ctx) {
     (void) ctx;
@@ -196,6 +201,11 @@ static void usb_server_thread(void * ctx) {
 
             case 6: { // RX on custom interface done
                 usb_native_rx_stream.did_finish();
+            } break;
+
+            case 7: { // stdout has data
+                usb_cdc_stdout_pending = false;
+                usb_cdc_stdout_sink.maybe_start_async_write();
             } break;
         }
     }

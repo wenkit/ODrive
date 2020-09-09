@@ -104,14 +104,17 @@ public:
      *
      * @param buffer: The buffer where the data to be written shall be fetched from.
      *        Must remain valid until `completer` is satisfied.
+     * @param handle: The variable pointed to by this argument is set to an
+     *        opaque transfer handle that can be passed to cancel_read() as
+     *        long as the operation has not yet completed.
+     *        If the completer is invoked directly from start_read() then the
+     *        handle is not modified after this invokation. That means it's safe
+     *        for the completion handler to reuse the handle variable.
      * @param completer: The completer that will be completed once the operation
      *        finishes, whether successful or not.
      *        Must remain valid until it is satisfied.
-     *
-     * @returns: An opaque transfer handle that can be passed to cancel_read()
-     *           as long as the operation has not yet completed.
      */
-    virtual TransferHandle start_read(bufptr_t buffer, Completer<ReadResult>& completer) = 0;
+    virtual void start_read(bufptr_t buffer, TransferHandle* handle, Completer<ReadResult>& completer) = 0;
 
     /**
      * @brief Cancels an operation that was previously started with start_read().
@@ -150,14 +153,17 @@ public:
      *
      * @param buffer: The buffer where the data to be written shall be fetched from.
      *        Must remain valid until `completer` is satisfied.
+     * @param handle: The variable pointed to by this argument is set to an
+     *        opaque transfer handle that can be passed to cancel_write() as
+     *        long as the operation has not yet completed.
+     *        If the completer is invoked directly from start_write() then the
+     *        handle is not modified after this invokation. That means it's safe
+     *        for the completion handler to reuse the handle variable.
      * @param completer: The completer that will be completed once the operation
      *        finishes, whether successful or not.
      *        Must remain valid until it is satisfied.
-     *
-     * @returns: An opaque transfer handle that can be passed to cancel_write()
-     *           as long as the operation has not yet completed.
      */
-    virtual TransferHandle start_write(cbufptr_t buffer, Completer<WriteResult>& completer) = 0;
+    virtual void start_write(cbufptr_t buffer, TransferHandle* handle, Completer<WriteResult>& completer) = 0;
 
     /**
      * @brief Cancels an operation that was previously started with start_write().

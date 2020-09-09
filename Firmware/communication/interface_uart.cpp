@@ -35,7 +35,7 @@ class Stm32UartTxStream : public AsyncStreamSink {
 public:
     Stm32UartTxStream(UART_HandleTypeDef* huart) : huart_(huart) {}
 
-    TransferHandle start_write(cbufptr_t buffer, Completer<WriteResult>& completer) final;
+    void start_write(cbufptr_t buffer, TransferHandle* handle, Completer<WriteResult>& completer) final;
     void cancel_write(TransferHandle transfer_handle) final;
     void did_finish();
 
@@ -46,7 +46,7 @@ public:
 
 class Stm32UartRxStream : public AsyncStreamSource {
 public:
-    TransferHandle start_read(bufptr_t buffer, Completer<ReadResult>& completer) final;
+    void start_read(bufptr_t buffer, TransferHandle* handle, Completer<ReadResult>& completer) final;
     void cancel_read(TransferHandle transfer_handle) final;
     void did_receive(uint8_t* buffer, size_t length);
 
@@ -58,19 +58,21 @@ public:
 
 using namespace fibre;
 
-TransferHandle Stm32UartTxStream::start_write(cbufptr_t buffer, Completer<WriteResult>& completer) {
+void Stm32UartTxStream::start_write(cbufptr_t buffer, TransferHandle* handle, Completer<WriteResult>& completer) {
     size_t chunk = std::min(buffer.size(), (size_t)UART_TX_BUFFER_SIZE);
 
     completer_ = &completer;
     tx_end_ = buffer.begin() + chunk;
+
+    if (handle) {
+        *handle = reinterpret_cast<TransferHandle>(this);
+    }
 
     if (HAL_UART_Transmit_DMA(huart_, const_cast<uint8_t*>(buffer.begin()), chunk) != HAL_OK) {
         completer_ = nullptr;
         tx_end_ = nullptr;
         completer.complete({kStreamError, buffer.begin()});
     }
-
-    return reinterpret_cast<TransferHandle>(this);
 }
 
 void Stm32UartTxStream::cancel_write(TransferHandle transfer_handle) {
@@ -83,10 +85,12 @@ void Stm32UartTxStream::did_finish() {
     safe_complete(completer_, {kStreamOk, tx_end});
 }
 
-TransferHandle Stm32UartRxStream::start_read(bufptr_t buffer, Completer<ReadResult>& completer) {
+void Stm32UartRxStream::start_read(bufptr_t buffer, TransferHandle* handle, Completer<ReadResult>& completer) {
     completer_ = &completer;
     rx_buf_ = buffer;
-    return reinterpret_cast<TransferHandle>(this);
+    if (handle) {
+        *handle = reinterpret_cast<TransferHandle>(this);
+    }
 }
 
 void Stm32UartRxStream::cancel_read(TransferHandle transfer_handle) {
@@ -115,6 +119,7 @@ fibre::AsyncStreamSinkMultiplexer<2> uart_tx_multiplexer(uart_tx_stream);
 fibre::BufferedStreamSink<64> uart0_stdout_sink(uart_tx_multiplexer); // Used in communication.cpp
 AsciiProtocol ascii_over_uart(&uart_rx_stream, &uart_tx_multiplexer);
 
+bool uart0_stdout_pending = false;
 
 static void uart_server_thread(void * ctx) {
     (void) ctx;
@@ -167,6 +172,11 @@ static void uart_server_thread(void * ctx) {
 
             case 2: {
                 uart_tx_stream.did_finish();
+            } break;
+
+            case 3: { // stdout has data
+                uart0_stdout_pending = false;
+                uart0_stdout_sink.maybe_start_async_write();
             } break;
         }
     }
