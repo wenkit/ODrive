@@ -381,6 +381,7 @@ void LibusbDiscoverer::poll_devices_now() {
     } else {
         // Call on_hotplug for all new devices
         for (ssize_t i = 0; i < n_devices; ++i) {
+            bus_number = libusb_get_bus_number(dev) << ", " << (int)libusb_get_device_address(dev);
             if (known_devices_.find(list[i]) == known_devices_.end()) {
                 on_hotplug(list[i], LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED);
             }

@@ -119,7 +119,7 @@ void LibFibreDiscoveryCtx::complete(fibre::LegacyObjectClient* obj_client, std::
         // on-demand.
         if (!obj->known_to_application) {
             obj->known_to_application = true;
-            FIBRE_LOG(D) << "constructing root object " << fibre::as_hex(reinterpret_cast<uintptr_t>(obj.get()));
+            //FIBRE_LOG(D) << "constructing root object " << fibre::as_hex(reinterpret_cast<uintptr_t>(obj.get()));
             if (ctx->on_construct_object) {
                 (*ctx->on_construct_object)(ctx->cb_ctx,
                     reinterpret_cast<LibFibreObject*>(obj.get()),
@@ -140,7 +140,7 @@ void LibFibreDiscoveryCtx::complete(fibre::LegacyObjectClient* obj_client) {
     if (ctx->on_destroy_object) {
         for (auto obj: obj_client->objects_) {
             auto obj_cast = reinterpret_cast<LibFibreObject*>(obj.get());
-            FIBRE_LOG(D) << "destroying subobject " << fibre::as_hex(reinterpret_cast<uintptr_t>(obj_cast));
+            //FIBRE_LOG(D) << "destroying subobject " << fibre::as_hex(reinterpret_cast<uintptr_t>(obj_cast));
             (*ctx->on_destroy_object)(ctx->cb_ctx, obj_cast);
         }
 
@@ -335,7 +335,7 @@ FibreStatus libfibre_get_attribute(LibFibreObject* parent_obj, LibFibreAttribute
         attr_cast->object->known_to_application = true;
 
         if (libfibre_ctx->on_construct_object) {
-            FIBRE_LOG(D) << "constructing subobject " << fibre::as_hex(reinterpret_cast<uintptr_t>(child_obj));
+            //FIBRE_LOG(D) << "constructing subobject " << fibre::as_hex(reinterpret_cast<uintptr_t>(child_obj));
             (*libfibre_ctx->on_construct_object)(libfibre_ctx->cb_ctx,
                 reinterpret_cast<LibFibreObject*>(child_obj),
                 reinterpret_cast<LibFibreInterface*>(child_obj->intf.get()),
