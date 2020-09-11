@@ -61,20 +61,15 @@
 #include <fibre/cpp_utils.hpp>
 
 #include <string.h>
+#include <chrono>
 
 #if defined(_WIN32) || defined(_WIN64)
 #include "windows.h"
 #endif
 
 #if defined(_WIN32) || defined(_WIN64) || defined(__linux__)
-
 #include <iostream>
-#include <mutex>
 #include <iomanip>
-
-using TMutex = std::mutex;
-using TLock = std::unique_lock<TMutex>;
-
 #else
 
 // We don't want <iostream> included on an embedded system as it makes the
@@ -90,11 +85,22 @@ namespace std {
 extern StdoutStream cerr;
 }
 
+#endif
+
+#if defined(_WIN32) || defined(_WIN64) || defined(__linux__)
+
+#include <mutex>
+using TMutex = std::mutex;
+using TLock = std::unique_lock<TMutex>;
+
+#else
+
 using TMutex = int;
 struct TLock {
     TLock() {}
     TLock(TMutex) {}
 };
+
 #endif
 
 namespace fibre {

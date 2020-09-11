@@ -5,6 +5,8 @@ set -euo pipefail
 # Arch Linux:
 #  gcc binutils
 #  arm-linux-gnueabihf-gcc arm-linux-gnueabihf-binutils
+#  mingw-w64-gcc mingw-w64-binutils
+#  p7zip
 
 
 mkdir -p third_party
@@ -76,14 +78,49 @@ FILES=('libfibre.cpp'
 	   'legacy_object_client.cpp'
 	   'logging.cpp')
 
-arm-linux-gnueabihf-g++ -shared -o libfibre-linux-armhf.so -fPIC -std=c++17 -I./include -DFIBRE_COMPILE -DFIBRE_ENABLE_CLIENT \
-        -I./third_party/libusb-dev-armhf/usr/include/libusb-1.0 \
-        ./third_party/libusb-armhf/lib/arm-linux-gnueabihf/libusb-1.0.so.0.2.0 \
-		"${FILES[@]}" \
-        -lpthread \
-        -L./third_party/libstdc++-linux-armhf/usr/lib/gcc-cross/arm-linux-gnueabihf/10 \
-        -Wl,--unresolved-symbols=ignore-in-shared-libs -static-libstdc++
+#arm-linux-gnueabihf-g++ -shared -o libfibre-linux-armhf.so -fPIC -std=c++17 -I./include -DFIBRE_COMPILE -DFIBRE_ENABLE_CLIENT \
+#        -I./third_party/libusb-dev-armhf/usr/include/libusb-1.0 \
+#		"${FILES[@]}" \
+#        ./third_party/libusb-armhf/lib/arm-linux-gnueabihf/libusb-1.0.so.0.2.0 \
+#        -lpthread \
+#        -L./third_party/libstdc++-linux-armhf/usr/lib/gcc-cross/arm-linux-gnueabihf/10 \
+#        -Wl,--unresolved-symbols=ignore-in-shared-libs -static-libstdc++
 
+
+mkdir -p "third_party/libusb-windows"
+pushd "third_party/libusb-windows"
+if [ ! -f libusb-1.0.23.7z ]; then
+    wget "https://github.com/libusb/libusb/releases/download/v1.0.23/libusb-1.0.23.7z"
+fi
+if [ ! -f "libusb-1.0.23/libusb-1.0.def" ]; then
+    7z x -o"libusb-1.0.23" "libusb-1.0.23.7z"
+fi
+popd
+
+
+
+
+#x86_64-w64-mingw32-g++ -shared -o libfibre-windows-amd64.dll -fPIC -std=c++17 -I./include -DFIBRE_COMPILE -DFIBRE_ENABLE_CLIENT \
+#        -I./third_party/libusb-windows/libusb-1.0.23/include/libusb-1.0 \
+#        "${FILES[@]}" \
+#        -static-libgcc \
+#        -Wl,-Bstatic \
+#        -lstdc++ \
+#        ./third_party/libusb-windows/libusb-1.0.23/MinGW64/static/libusb-1.0.a \
+#        -Wl,-Bdynamic
+
+# -shared -o libfibre-windows-amd64.dll -fPIC -std=c++17 -I./include -DFIBRE_COMPILE -DFIBRE_ENABLE_CLIENT \
+#        -I./third_party/libusb-windows/libusb-1.0.23/include/libusb-1.0 \
+#        "${FILES[@]}" \
+#        -static-libgcc \
+#        -Wl,-Bstatic \
+#        -lstdc++ \
+#        ./third_party/libusb-windows/libusb-1.0.23/MinGW64/static/libusb-1.0.a \
+#        -Wl,-Bdynamic
+
+
+#\
+        #/usr/x86_64-w64-mingw32/lib/libpthread.a
         
         
         # libudev.so.1.6.13 libpthread-2.28.so librt-2.28.so libc-2.28.so \

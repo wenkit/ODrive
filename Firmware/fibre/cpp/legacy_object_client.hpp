@@ -52,7 +52,7 @@ struct FibreInterface {
 struct LegacyObject {
     LegacyObjectClient* client;
     size_t ep_num = 0;
-    std::shared_ptr<FibreInterface> interface;
+    std::shared_ptr<FibreInterface> intf;
     bool known_to_application;
 };
 

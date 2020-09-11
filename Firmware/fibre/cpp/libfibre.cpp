@@ -103,7 +103,7 @@ void LibFibreDiscoveryCtx::complete(fibre::ChannelDiscoveryResult result) {
 // on_found_root_object callback for LegacyProtocolPacketBased::start()
 void LibFibreDiscoveryCtx::complete(fibre::LegacyObjectClient* obj_client, std::shared_ptr<fibre::LegacyObject> obj) {
     auto obj_cast = reinterpret_cast<LibFibreObject*>(obj.get()); // corresponding reverse cast in libfibre_get_attribute()
-    auto intf_cast = reinterpret_cast<LibFibreInterface*>(obj->interface.get()); // corresponding reverse cast in libfibre_subscribe_to_interface()
+    auto intf_cast = reinterpret_cast<LibFibreInterface*>(obj->intf.get()); // corresponding reverse cast in libfibre_subscribe_to_interface()
 
     for (auto& obj: obj_client->objects_) {
         // If the callback handler calls libfibre_get_attribute() before
@@ -116,8 +116,8 @@ void LibFibreDiscoveryCtx::complete(fibre::LegacyObjectClient* obj_client, std::
             if (ctx->on_construct_object) {
                 (*ctx->on_construct_object)(ctx->cb_ctx,
                     reinterpret_cast<LibFibreObject*>(obj.get()),
-                    reinterpret_cast<LibFibreInterface*>(obj->interface.get()),
-                    obj->interface->name.size() ? obj->interface->name.data() : nullptr, obj->interface->name.size());
+                    reinterpret_cast<LibFibreInterface*>(obj->intf.get()),
+                    obj->intf->name.size() ? obj->intf->name.data() : nullptr, obj->intf->name.size());
             }
         }
     }
@@ -295,8 +295,8 @@ void libfibre_subscribe_to_interface(LibFibreInterface* interface,
             (*on_attribute_added)(cb_ctx,
                 reinterpret_cast<LibFibreAttribute*>(&attr.second), // corresponding reverse cast in libfibre_get_attribute()
                 attr.first.data(), attr.first.size(),
-                reinterpret_cast<LibFibreInterface*>(attr.second.object->interface.get()), // corresponding reverse cast in libfibre_subscribe_to_interface()
-                attr.second.object->interface->name.size() ? attr.second.object->interface->name.data() : nullptr, attr.second.object->interface->name.size()
+                reinterpret_cast<LibFibreInterface*>(attr.second.object->intf.get()), // corresponding reverse cast in libfibre_subscribe_to_interface()
+                attr.second.object->intf->name.size() ? attr.second.object->intf->name.data() : nullptr, attr.second.object->intf->name.size()
             );
         }
     }
@@ -309,7 +309,7 @@ FibreStatus libfibre_get_attribute(LibFibreObject* parent_obj, LibFibreAttribute
 
     fibre::LegacyObject* parent_obj_cast = reinterpret_cast<fibre::LegacyObject*>(parent_obj);
     fibre::LegacyFibreAttribute* attr_cast = reinterpret_cast<fibre::LegacyFibreAttribute*>(attr); // corresponding reverse cast in libfibre_subscribe_to_interface()
-    auto& attributes = parent_obj_cast->interface->attributes;
+    auto& attributes = parent_obj_cast->intf->attributes;
 
     bool is_member = std::find_if(attributes.begin(), attributes.end(), [&](auto& kv) {
         return &kv.second == attr_cast;
@@ -330,8 +330,8 @@ FibreStatus libfibre_get_attribute(LibFibreObject* parent_obj, LibFibreAttribute
             FIBRE_LOG(D) << "constructing subobject " << fibre::as_hex(reinterpret_cast<uintptr_t>(child_obj));
             (*libfibre_ctx->on_construct_object)(libfibre_ctx->cb_ctx,
                 reinterpret_cast<LibFibreObject*>(child_obj),
-                reinterpret_cast<LibFibreInterface*>(child_obj->interface.get()),
-                child_obj->interface->name.size() ? child_obj->interface->name.data() : nullptr, child_obj->interface->name.size());
+                reinterpret_cast<LibFibreInterface*>(child_obj->intf.get()),
+                child_obj->intf->name.size() ? child_obj->intf->name.data() : nullptr, child_obj->intf->name.size());
         }
     }
 
@@ -450,9 +450,9 @@ void libfibre_start_call(LibFibreObject* obj, LibFibreFunction* func,
     fibre::LegacyObject* obj_cast = reinterpret_cast<fibre::LegacyObject*>(obj);
     fibre::LegacyFibreFunction* func_cast = reinterpret_cast<fibre::LegacyFibreFunction*>(func);
 
-    bool is_member = std::find_if(obj_cast->interface->functions.begin(), obj_cast->interface->functions.end(), [&](auto& kv) {
+    bool is_member = std::find_if(obj_cast->intf->functions.begin(), obj_cast->intf->functions.end(), [&](auto& kv) {
         return &kv.second == func_cast;
-    }) != obj_cast->interface->functions.end();
+    }) != obj_cast->intf->functions.end();
 
     if (!is_member) {
         FIBRE_LOG(W) << "attempt to invoke function on an object that does not implement it";

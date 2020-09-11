@@ -333,7 +333,7 @@ std::shared_ptr<LegacyObject> LegacyObjectClient::load_object(json_value list_va
             LegacyObject subobj{
                 .client = this,
                 .ep_num = (size_t)json_as_int(id),
-                .interface = get_property_interfaces(type_str, can_write),
+                .intf = get_property_interfaces(type_str, can_write),
                 .known_to_application = false
             };
             auto subobj_ptr = std::make_shared<LegacyObject>(subobj);
@@ -348,7 +348,7 @@ std::shared_ptr<LegacyObject> LegacyObjectClient::load_object(json_value list_va
     LegacyObject obj{
         .client = this,
         .ep_num = 0,
-        .interface = std::make_shared<FibreInterface>(intf),
+        .intf = std::make_shared<FibreInterface>(intf),
         .known_to_application = false
     };
     auto obj_ptr = std::make_shared<LegacyObject>(obj);
