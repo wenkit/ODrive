@@ -167,7 +167,7 @@ int LibusbDiscoverer::deinit(int stage) {
     if (stage > 0) {
         // TODO: we should probably deinit and close all connected channels
         for (auto& dev: known_devices_) {
-            libusb_unref_device(dev.first);
+            libusb_unref_device(dev.second.dev);
         }
     }
 
@@ -259,7 +259,7 @@ void LibusbDiscoverer::start_channel_discovery(const char* specs, size_t specs_l
     subscriptions_.push_back(subscription);
 
     for (auto& dev: known_devices_) {
-        consider_device(dev.first, subscription);
+        consider_device(dev.second.dev, subscription);
     }
 
     if (handle) {
@@ -329,21 +329,23 @@ void LibusbDiscoverer::on_remove_pollfd(int fd) {
  */
 int LibusbDiscoverer::on_hotplug(struct libusb_device *dev,
                                  libusb_hotplug_event event) {
+    uint8_t bus_number = libusb_get_bus_number(dev);
+    uint8_t dev_number = libusb_get_device_address(dev);
     
     if (LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED == event) {
-        FIBRE_LOG(D) << "device arrived: bus " << (int)libusb_get_bus_number(dev) << ", " << (int)libusb_get_device_address(dev);
+        FIBRE_LOG(D) << "device arrived: bus " << (int)bus_number << ", " << (int)dev_number;
 
         for (auto& subscription: subscriptions_) {
             consider_device(dev, subscription);
         }
 
         // add empty placeholder to the list of known devices
-        known_devices_[libusb_ref_device(dev)] = {};
+        known_devices_[bus_number << 8 | dev_number] = { .dev = libusb_ref_device(dev) };
 
     } else if (LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT == event) {
-        FIBRE_LOG(D) << "device left: bus " << (int)libusb_get_bus_number(dev) << ", " << (int)libusb_get_device_address(dev);
+        FIBRE_LOG(D) << "device left: bus " << (int)bus_number << ", " << (int)dev_number;
 
-        auto it = known_devices_.find(dev);
+        auto it = known_devices_.find(bus_number << 8 | dev_number);
 
         if (it != known_devices_.end()) {
             for (auto& ep: it->second.ep_in) {
@@ -375,15 +377,21 @@ void LibusbDiscoverer::poll_devices_now() {
 
     libusb_device** list = nullptr;
     ssize_t n_devices = libusb_get_device_list(libusb_ctx_, &list);
+    std::unordered_map<uint16_t, libusb_device*> current_devices;
 
     if (n_devices < 0) {
         FIBRE_LOG(W) << "libusb_get_device_list() failed.";
     } else {
-        // Call on_hotplug for all new devices
         for (ssize_t i = 0; i < n_devices; ++i) {
-            bus_number = libusb_get_bus_number(dev) << ", " << (int)libusb_get_device_address(dev);
-            if (known_devices_.find(list[i]) == known_devices_.end()) {
-                on_hotplug(list[i], LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED);
+            uint8_t bus_number = libusb_get_bus_number(list[i]);
+            uint8_t dev_number = libusb_get_device_address(list[i]);
+            current_devices[bus_number << 8 | dev_number] = list[i];
+        }
+
+        // Call on_hotplug for all new devices
+        for (auto& dev: current_devices) {
+            if (known_devices_.find(dev.first) == known_devices_.end()) {
+                on_hotplug(dev.second, LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED);
             }
         }
 
@@ -392,8 +400,8 @@ void LibusbDiscoverer::poll_devices_now() {
         std::vector<libusb_device*> lost_devices;
 
         for (auto& dev: known_devices_) {
-            if (std::find(list, list + n_devices, dev.first) == list + n_devices) {
-                lost_devices.push_back(dev.first);
+            if (current_devices.find(dev.first) == current_devices.end()) {
+                lost_devices.push_back(dev.second.dev);
             }
         }
 
@@ -413,8 +421,11 @@ void LibusbDiscoverer::poll_devices_now() {
 }
 
 void LibusbDiscoverer::consider_device(struct libusb_device *device, ChannelDiscoveryContext* subscription) {
-    bool mismatch = (subscription->interface_specs.bus != -1 && libusb_get_bus_number(device) != subscription->interface_specs.bus)
-                 || (subscription->interface_specs.address != -1 && libusb_get_device_address(device) != subscription->interface_specs.address);
+    uint8_t bus_number = libusb_get_bus_number(device);
+    uint8_t dev_number = libusb_get_device_address(device);
+
+    bool mismatch = (subscription->interface_specs.bus != -1 && bus_number != subscription->interface_specs.bus)
+                 || (subscription->interface_specs.address != -1 && dev_number != subscription->interface_specs.address);
 
     if (mismatch) {
         return;
@@ -466,7 +477,7 @@ void LibusbDiscoverer::consider_device(struct libusb_device *device, ChannelDisc
                     }
                 }
 
-                Device& my_dev = known_devices_[device];
+                Device& my_dev = known_devices_[bus_number << 8 | dev_number];
 
                 // If the same device was already returned in a previous discovery
                 // then it will already be open.

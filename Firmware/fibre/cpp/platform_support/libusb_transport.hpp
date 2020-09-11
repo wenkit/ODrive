@@ -46,6 +46,7 @@ public:
 
 private:
     struct Device {
+        struct libusb_device* dev = nullptr;
         struct libusb_device_handle* handle = nullptr;
         std::vector<LibusbBulkInEndpoint*> ep_in;
         std::vector<LibusbBulkOutEndpoint*> ep_out;
@@ -66,7 +67,7 @@ private:
     bool run_internal_event_loop_ = false;
     std::thread* internal_event_loop_thread_;
     EventLoopTimer* device_polling_timer_;
-    std::unordered_map<libusb_device*, Device> known_devices_;
+    std::unordered_map<uint16_t, Device> known_devices_; // key: bus_number << 8 | dev_number
     std::vector<ChannelDiscoveryContext*> subscriptions_;
 };
 
