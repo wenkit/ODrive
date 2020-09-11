@@ -17,14 +17,20 @@ static const struct LibFibreVersion libfibre_version = { 0, 1, 0 };
 
 class FIBRE_PRIVATE ExternalEventLoop : public EventLoop {
 public:
-    ExternalEventLoop(register_event_cb_t register_event,
+    ExternalEventLoop(post_cb_t post,
+                      register_event_cb_t register_event,
                       deregister_event_cb_t deregister_event,
                       call_later_cb_t call_later,
                       cancel_timer_cb_t cancel_timer) :
+        post_(post),
         register_event_(register_event),
         deregister_event_(deregister_event),
         call_later_(call_later),
         cancel_timer_(cancel_timer) {}
+
+    int post(void (*callback)(void*), void *ctx) final {
+        return (*post_)(callback, ctx);
+    }
 
     int register_event(int event_fd, uint32_t events, void (*callback)(void*), void* ctx) final {
         return (*register_event_)(event_fd, events, callback, ctx);
@@ -43,6 +49,7 @@ public:
     }
 
 private:
+    post_cb_t post_;
     register_event_cb_t register_event_;
     deregister_event_cb_t deregister_event_;
     call_later_cb_t call_later_;
@@ -151,6 +158,7 @@ const struct LibFibreVersion* libfibre_get_version() {
 }
 
 LibFibreCtx* libfibre_open(
+        post_cb_t post,
         register_event_cb_t register_event,
         deregister_event_cb_t deregister_event,
         call_later_cb_t call_later,
@@ -164,7 +172,7 @@ LibFibreCtx* libfibre_open(
     }
     
     LibFibreCtx* ctx = new LibFibreCtx();
-    ctx->event_loop = new ExternalEventLoop(register_event, deregister_event, call_later, cancel_timer);
+    ctx->event_loop = new ExternalEventLoop(post, register_event, deregister_event, call_later, cancel_timer);
     ctx->on_construct_object = construct_object;
     ctx->on_destroy_object = destroy_object;
     ctx->cb_ctx;

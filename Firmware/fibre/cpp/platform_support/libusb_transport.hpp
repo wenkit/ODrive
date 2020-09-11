@@ -60,6 +60,7 @@ private:
     void consider_device(struct libusb_device *device, ChannelDiscoveryContext* subscription);
 
     EventLoop* event_loop_ = nullptr;
+    bool using_sparate_libusb_thread_; // true on Windows. Initialized in init()
     libusb_context *libusb_ctx_ = nullptr; // libusb session
     libusb_hotplug_callback_handle hotplug_callback_handle_ = 0;
     bool run_internal_event_loop_ = false;
@@ -72,7 +73,7 @@ private:
 template<typename TRes>
 class FIBRE_PRIVATE LibusbBulkEndpoint {
 public:
-    bool init(struct libusb_device_handle* handle, uint8_t endpoint_id);
+    bool init(EventLoop* event_loop, struct libusb_device_handle* handle, uint8_t endpoint_id);
     bool deinit();
 
 protected:
@@ -83,6 +84,7 @@ private:
     void submit_transfer();
     void on_transfer_finished();
 
+    EventLoop* event_loop_ = nullptr; // only non-null on Windows where we use a separate libusb thread
     struct libusb_device_handle* handle_ = nullptr;
     uint8_t endpoint_id_ = 0;
     struct libusb_transfer* transfer_ = nullptr;

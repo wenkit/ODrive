@@ -14,6 +14,11 @@ struct EventLoopTimer;
  */
 class EventLoop {
 public:
+    /**
+     * @brief Registers a callback for immediate execution on the event loop thread.
+     */
+    virtual int post(void (*callback)(void*), void *ctx) = 0;
+
     virtual int register_event(int event_fd, uint32_t events, void (*callback)(void*), void* ctx) = 0;
     virtual int deregister_event(int event_fd) = 0;
 

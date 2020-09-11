@@ -43,8 +43,9 @@ int LibusbDiscoverer::init(EventLoop* event_loop) {
     // Note: this will fail on Windows. Since this is used for epoll, we need a
     // different approach for Windows anyway.
     const struct libusb_pollfd** pollfds = libusb_get_pollfds(libusb_ctx_);
+    using_sparate_libusb_thread_ = !pollfds;
 
-    if (pollfds) {
+    if (!using_sparate_libusb_thread_) {
         // This code path is taken on Linux
         FIBRE_LOG(D) << "Using externally provided event loop";
 
@@ -116,6 +117,12 @@ int LibusbDiscoverer::init(EventLoop* event_loop) {
         FIBRE_LOG(D) << "Using periodic polling to discover devices";
 
         poll_devices_now(); // this will also start a timer to poll again periodically
+    }
+
+    if (!pollfds && libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
+        // The hotplug callback handler above is not yet thread-safe. To make it thread-safe
+        // we'd need to post it on the application's event loop.
+        FIBRE_LOG(E) << "Hotplug detection with separate libusb thread will cause trouble.";
     }
 
     return 0;
@@ -285,7 +292,8 @@ int LibusbDiscoverer::stop_channel_discovery(ChannelDiscoveryContext* handle) {
 }
 
 /**
- * @brief Runs the event handling loop. This function blocks until ?? is Null.
+ * @brief Runs the event handling loop. This function blocks until
+ * run_internal_event_loop_ is false.
  * 
  * This loop is only executed on Windows. On other platforms the provided EventLoop is used.
  */
@@ -470,8 +478,16 @@ void LibusbDiscoverer::consider_device(struct libusb_device *device, ChannelDisc
                     }
                 }
 
+                int result = libusb_claim_interface(my_dev.handle, i);
+                if (LIBUSB_SUCCESS != result) {
+                    FIBRE_LOG(E) << "Could not claim interface " << i << " on USB device: " << result;
+                    continue;
+                }
+
+                EventLoop* event_loop = using_sparate_libusb_thread_ ? event_loop_ : nullptr;
+
                 LibusbBulkInEndpoint* ep_in = new LibusbBulkInEndpoint();
-                if (libusb_ep_in && ep_in->init(my_dev.handle, libusb_ep_in->bEndpointAddress)) {
+                if (libusb_ep_in && ep_in->init(event_loop, my_dev.handle, libusb_ep_in->bEndpointAddress)) {
                     my_dev.ep_in.push_back(ep_in);
                 } else {
                     delete ep_in;
@@ -479,7 +495,7 @@ void LibusbDiscoverer::consider_device(struct libusb_device *device, ChannelDisc
                 }
 
                 LibusbBulkOutEndpoint* ep_out = new LibusbBulkOutEndpoint();
-                if (libusb_ep_out && ep_out->init(my_dev.handle, libusb_ep_out->bEndpointAddress)) {
+                if (libusb_ep_out && ep_out->init(event_loop, my_dev.handle, libusb_ep_out->bEndpointAddress)) {
                     my_dev.ep_out.push_back(ep_out);
                 } else {
                     delete ep_out;
@@ -501,7 +517,8 @@ void LibusbDiscoverer::consider_device(struct libusb_device *device, ChannelDisc
 /* LibusbBulkEndpoint --------------------------------------------------------*/
 
 template<typename TRes>
-bool LibusbBulkEndpoint<TRes>::init(libusb_device_handle* handle, uint8_t endpoint_id) {
+bool LibusbBulkEndpoint<TRes>::init(EventLoop* event_loop, libusb_device_handle* handle, uint8_t endpoint_id) {
+    event_loop_ = event_loop;
     handle_ = handle;
     transfer_ = libusb_alloc_transfer(0);
     endpoint_id_ = endpoint_id;
@@ -537,13 +554,26 @@ void LibusbBulkEndpoint<TRes>::start_transfer(bufptr_t buffer, TransferHandle* h
         return;
     }
 
+    auto direct_callback = [](struct libusb_transfer* transfer){
+        ((LibusbBulkEndpoint<TRes>*)transfer->user_data)->on_transfer_finished();
+    };
+
+    // This callback is used if we start our own libusb thread
+    // separate from the application's event loop thread
+    auto indirect_callback = [](struct libusb_transfer* transfer){
+        ((LibusbBulkEndpoint<TRes>*)transfer->user_data)->event_loop_->post(
+            [](void* ctx) {
+                ((LibusbBulkEndpoint<TRes>*)ctx)->on_transfer_finished();
+            }, transfer->user_data
+        );
+    };
+
     //FIBRE_LOG(D) << "transfer of size " << buffer.size();
     libusb_fill_bulk_transfer(transfer_, handle_, endpoint_id_,
         buffer.begin(), buffer.size(),
-        [](struct libusb_transfer* transfer){
-            ((LibusbBulkEndpoint<TRes>*)transfer->user_data)->on_transfer_finished();
-        }, this, kBulkTimeoutMs);
-
+        event_loop_ ? indirect_callback : direct_callback,
+        this, kBulkTimeoutMs);
+    
     completer_ = &completer;
     submit_transfer();
 }
@@ -565,10 +595,10 @@ void LibusbBulkEndpoint<TRes>::submit_transfer() {
         // ok
         FIBRE_LOG(T) << "started USB transfer on EP " << as_hex(endpoint_id_);
     } else if (LIBUSB_ERROR_NO_DEVICE == result) {
-        FIBRE_LOG(W) << "couldn't start USB transfer: " << libusb_error_name(result);
+        FIBRE_LOG(W) << "couldn't start USB transfer on EP " << as_hex(endpoint_id_) << ": " << libusb_error_name(result);
         safe_complete(completer_, {kStreamClosed, nullptr});
     } else {
-        FIBRE_LOG(W) << "couldn't start USB transfer: " << libusb_error_name(result);
+        FIBRE_LOG(W) << "couldn't start USB transfer on EP " << as_hex(endpoint_id_) << ": " << libusb_error_name(result);
         safe_complete(completer_, {kStreamError, nullptr});
     }
 }

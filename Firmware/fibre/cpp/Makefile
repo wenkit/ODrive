@@ -22,8 +22,8 @@ linux-cross:
 		-lusb
 
 windows:
-	g++ -shared -o libfibre.dll -fPIC -std=c++17 -I./libusb-1.0.23/include/libusb-1.0 -I./include -DFIBRE_COMPILE -DFIBRE_ENABLE_CLIENT \
+	g++ -shared -o libfibre.dll -fPIC -std=c++17 -I./third_party/libusb-windows/libusb-1.0.23/include/libusb-1.0 -I./include -DFIBRE_COMPILE -DFIBRE_ENABLE_CLIENT \
 		$(FILES) \
-		-static-libgcc -Wl,-Bstatic -lstdc++ -lpthread libusb-1.0.23/MinGW64/static/libusb-1.0.a -Wl,-Bdynamic
+		-static-libgcc -Wl,-Bstatic -lstdc++ ./third_party/libusb-windows/libusb-1.0.23/MinGW64/static/libusb-1.0.a -Wl,-Bdynamic
 
 # nm -D libfibre.so | grep T

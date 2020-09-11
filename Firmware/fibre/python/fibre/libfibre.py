@@ -15,7 +15,7 @@ import platform
 lib_names = {
     ('Linux', 'x86_64'): 'libfibre-linux-amd64.so',
     ('Linux', 'armv7l'): 'libfibre-linux-armhf.so',
-    ('Windows', 'x86_64'): 'libfibre-mingw-amd64.dll'
+    ('Windows', 'AMD64'): 'libfibre-windows-amd64.dll'
 }
 
 system_desc = (platform.system(), platform.machine())
@@ -40,6 +40,7 @@ lib = windll.LoadLibrary(lib_path) if os.name == 'nt' else cdll.LoadLibrary(lib_
 
 # libfibre definitions --------------------------------------------------------#
 
+PostSignature = CFUNCTYPE(c_void_p, CFUNCTYPE(None, c_void_p), POINTER(c_int))
 RegisterEventSignature = CFUNCTYPE(c_int, c_int, c_uint32, CFUNCTYPE(None, c_void_p), POINTER(c_int))
 DeregisterEventSignature = CFUNCTYPE(c_int, c_int)
 CallLaterSignature = CFUNCTYPE(c_void_p, c_float, CFUNCTYPE(None, c_void_p), POINTER(c_int))
@@ -82,7 +83,7 @@ if version.major != 0:
     raise Exception("Incompatible libfibre version: {}".format(version))
 
 libfibre_open = lib.libfibre_open
-libfibre_open.argtypes = [RegisterEventSignature, DeregisterEventSignature, CallLaterSignature, CancelTimerSignature]
+libfibre_open.argtypes = [PostSignature, RegisterEventSignature, DeregisterEventSignature, CallLaterSignature, CancelTimerSignature, ConstructObjectSignature, DestroyObjectSignature, c_void_p]
 libfibre_open.restype = c_void_p
 
 libfibre_close = lib.libfibre_close
@@ -409,6 +410,7 @@ class LibFibre():
 
         # We must keep a reference to these function objects so they don't get
         # garbage collected.
+        self.c_post = PostSignature(self._post)
         self.c_register_event = RegisterEventSignature(self._register_event)
         self.c_deregister_event = DeregisterEventSignature(self._deregister_event)
         self.c_call_later = CallLaterSignature(self._call_later)
@@ -429,9 +431,13 @@ class LibFibre():
         self._objects = {} # key: libfibre handle, value: pyhton class
 
         self.ctx = c_void_p(libfibre_open(
+            self.c_post,
             self.c_register_event, self.c_deregister_event,
             self.c_call_later, self.c_cancel_timer,
-            self.c_construct_object, self.c_destroy_object))
+            self.c_construct_object, self.c_destroy_object, None))
+
+    def _post(self, callback, ctx):
+        self.loop.call_soon_threadsafe(callback, ctx)
 
     def _register_event(self, event_fd, events, callback, ctx):
         self.eventfd_map[event_fd] = events

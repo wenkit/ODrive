@@ -76,6 +76,7 @@ struct LibFibreVersion {
 };
 
 
+typedef int (*post_cb_t)(void (*callback)(void*), void* cb_ctx);
 typedef int (*register_event_cb_t)(int fd, uint32_t events, void (*callback)(void*), void* cb_ctx);
 typedef int (*deregister_event_cb_t)(int fd);
 typedef struct EventLoopTimer* (*call_later_cb_t)(float delay, void (*callback)(void*), void* cb_ctx);
@@ -143,6 +144,13 @@ const struct LibFibreVersion* libfibre_get_version();
 /**
  * @brief Opens and initializes a Fibre context.
  * 
+ * @param post: Called by libfibre when it wants the application to run
+ *        a callback on the application's event loop.
+ *        This is the only callback that libfibre can invoke from a different
+ *        thread than the event loop thread itself. The application must
+ *        ensure that this callback is thread-safe.
+ *        This allows libfibre to run other threads internally while keeping
+ *        threading promises made to the application.
  * @param register_event: TODO: this is a Linux specific callback. Need to use
  *        IOCP on Windows.
  * @param deregister_event: TODO: this is a Linux specific callback. Need to use
@@ -167,6 +175,7 @@ const struct LibFibreVersion* libfibre_get_version();
  *        destroy_object().
  */
 FIBRE_PUBLIC struct LibFibreCtx* libfibre_open(
+    post_cb_t post,
     register_event_cb_t register_event,
     deregister_event_cb_t deregister_event,
     call_later_cb_t call_later,
