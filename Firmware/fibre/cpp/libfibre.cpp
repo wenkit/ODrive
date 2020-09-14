@@ -175,7 +175,7 @@ LibFibreCtx* libfibre_open(
     ctx->event_loop = new ExternalEventLoop(post, register_event, deregister_event, call_later, cancel_timer);
     ctx->on_construct_object = construct_object;
     ctx->on_destroy_object = destroy_object;
-    ctx->cb_ctx;
+    ctx->cb_ctx = cb_ctx;
 
     if (ctx->libusb_discoverer.init(ctx->event_loop) != 0) {
         delete ctx;
@@ -384,8 +384,8 @@ void transcode(fibre::LegacyObjectClient* client, std::vector<uint8_t>& buffer, 
         } else if (!to && arg.codec == "endpoint_ref") {
             fibre::cbufptr_t orig_range = fibre::cbufptr_t{buffer}.skip(offset).take(4);
 
-            uint16_t ep_num = read_le<uint16_t>(&orig_range).value();
-            uint16_t json_crc = read_le<uint16_t>(&orig_range).value();
+            uint16_t ep_num = *read_le<uint16_t>(&orig_range);
+            uint16_t json_crc = *read_le<uint16_t>(&orig_range);
 
             resize_at(buffer, offset, (ssize_t)sizeof(uintptr_t) - (ssize_t)4);
             fibre::bufptr_t transcoded_range = fibre::bufptr_t{buffer}.skip(offset).take(sizeof(uintptr_t));

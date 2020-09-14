@@ -56,7 +56,7 @@
 #define __FIBRE_LOGGING_HPP
 
 // TODO: support lite-version of logging on embedded systems
-#if defined(_WIN32) || defined(_WIN64) || defined(__linux__)
+#if defined(_WIN32) || defined(_WIN64) || defined(__linux__) || defined(__APPLE__)
 
 #include <fibre/cpp_utils.hpp>
 
@@ -67,7 +67,7 @@
 #include "windows.h"
 #endif
 
-#if defined(_WIN32) || defined(_WIN64) || defined(__linux__)
+#if defined(_WIN32) || defined(_WIN64) || defined(__linux__) || defined(__APPLE__)
 #include <iostream>
 #include <iomanip>
 #else
@@ -246,7 +246,8 @@ constexpr log_level_t get_max_log_verbosity() { return FIBRE_MAX_LOG_VERBOSITY; 
  */
 template<typename TOPIC>
 log_level_t get_current_log_verbosity() {
-    char var_name[sizeof("FIBRE_LOG_") + strlen(TOPIC::get_label())] = "FIBRE_LOG_";
+    char var_name[sizeof("FIBRE_LOG_") + strlen(TOPIC::get_label())];
+    strcpy(var_name, "FIBRE_LOG_");
     strcat(var_name, TOPIC::get_label());
 
     // TODO: provide a way to disable the 

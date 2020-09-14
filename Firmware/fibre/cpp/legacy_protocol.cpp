@@ -272,7 +272,7 @@ void LegacyProtocolPacketBased::cancel_endpoint_operation(EndpointOperationHandl
     Completer<EndpointOperationResult>* completer;
     uint8_t* rx_end = nullptr;
 
-    if (pending_operation_.seqno = seqno) {
+    if (pending_operation_.seqno == seqno) {
         completer = pending_operation_.completer;
         rx_end = pending_operation_.rx_buf.begin();
         pending_operation_ = {};
@@ -309,16 +309,16 @@ bool fibre::endpoint0_handler(fibre::cbufptr_t* input_buffer, fibre::bufptr_t* o
     if (!offset.has_value()) {
         // Didn't receive any offset
         return false;
-    } else if (offset.value() == 0xffffffff) {
+    } else if (*offset == 0xffffffff) {
         // If the offset is special value 0xFFFFFFFF, send back the JSON version ID instead
         return write_le<uint32_t>(json_version_id_, output_buffer);
-    } else if (offset.value() >= embedded_json_length) {
+    } else if (*offset >= embedded_json_length) {
         // Attempt to read beyond the buffer end - return empty response
         return true;
     } else {
         // Return part of the json file
-        size_t n_copy = std::min(output_buffer->size(), embedded_json_length - (size_t)offset.value());
-        memcpy(output_buffer->begin(), embedded_json + offset.value(), n_copy);
+        size_t n_copy = std::min(output_buffer->size(), embedded_json_length - (size_t)*offset);
+        memcpy(output_buffer->begin(), embedded_json + *offset, n_copy);
         *output_buffer = output_buffer->skip(n_copy);
         return true;
     }
@@ -399,14 +399,14 @@ void LegacyProtocolPacketBased::on_read_finished(ReadResult result) {
     if (!seq_no.has_value()) {
         FIBRE_LOG(W) << "packet too short";
 
-    } else if (seq_no.value() & 0x8000) {
+    } else if (*seq_no & 0x8000) {
 
 #ifdef FIBRE_ENABLE_CLIENT
         
-        auto it = expected_acks_.find(seq_no.value() & 0x7fff);
+        auto it = expected_acks_.find(*seq_no & 0x7fff);
 
         if (it == expected_acks_.end()) {
-            FIBRE_LOG(W) << "received unexpected ACK: " << (seq_no.value() & 0x7fff);
+            FIBRE_LOG(W) << "received unexpected ACK: " << (*seq_no & 0x7fff);
         } else {
             size_t n_copy = std::min((size_t)(result.end - rx_buf.begin()), it->second.rx_buf.size());
             memcpy(it->second.rx_buf.begin(), rx_buf.begin(), n_copy);
@@ -432,7 +432,7 @@ void LegacyProtocolPacketBased::on_read_finished(ReadResult result) {
         // TODO: think about some kind of ordering guarantees
         // currently the seq_no is just used to associate a response with a request
 
-        uint16_t endpoint_id = read_le<uint16_t>(&rx_buf).value();
+        uint16_t endpoint_id = *read_le<uint16_t>(&rx_buf);
         bool expect_response = endpoint_id & 0x8000;
         endpoint_id &= 0x7fff;
 
@@ -458,7 +458,7 @@ void LegacyProtocolPacketBased::on_read_finished(ReadResult result) {
 
         // TODO: if more bytes than the MTU were requested, should we abort or just return as much as possible?
 
-        uint16_t expected_response_length = read_le<uint16_t>(&rx_buf).value();
+        uint16_t expected_response_length = *read_le<uint16_t>(&rx_buf);
 
         // Limit response length according to our local TX buffer size
         if (expected_response_length > tx_mtu_ - 2)
@@ -471,7 +471,7 @@ void LegacyProtocolPacketBased::on_read_finished(ReadResult result) {
         // Send response
         if (expect_response) {
             size_t actual_response_length = expected_response_length - output_buffer.size() + 2;
-            write_le<uint16_t>(seq_no.value() | 0x8000, tx_buf_);
+            write_le<uint16_t>(*seq_no | 0x8000, tx_buf_);
 
             FIBRE_LOG(D) << "send packet: " << as_hex(cbufptr_t{tx_buf_, actual_response_length});
             tx_channel_->start_write({tx_buf_, actual_response_length}, &tx_handle_, *static_cast<WriteCompleter*>(this));

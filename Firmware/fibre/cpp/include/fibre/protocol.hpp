@@ -84,7 +84,7 @@ template<> struct Codec<uint64_t> {
 template<> struct Codec<float> {
     static std::optional<float> decode(cbufptr_t* buffer) {
         std::optional<uint32_t> int_val = Codec<uint32_t>::decode(buffer);
-        return int_val.has_value() ? std::optional<float>(*reinterpret_cast<float*>(&int_val.value())) : std::nullopt;
+        return int_val.has_value() ? std::optional<float>(*reinterpret_cast<float*>(&*int_val)) : std::nullopt;
     }
     static bool encode(float value, bufptr_t* buffer) {
         void* ptr = &value;
@@ -95,7 +95,7 @@ template<typename T>
 struct Codec<T, std::enable_if_t<std::is_enum<T>::value>> {
     static std::optional<T> decode(cbufptr_t* buffer) {
         std::optional<int32_t> int_val = SimpleSerializer<int32_t, false>::read(&(buffer->begin()), buffer->end());
-        return int_val.has_value() ? std::make_optional(static_cast<T>(int_val.value())) : std::nullopt;
+        return int_val.has_value() ? std::make_optional(static_cast<T>(*int_val)) : std::nullopt;
     }
     static bool encode(T value, bufptr_t* buffer) { return SimpleSerializer<int32_t, false>::write(value, &(buffer->begin()), buffer->end()); }
 };
@@ -103,7 +103,7 @@ template<> struct Codec<endpoint_ref_t> {
     static std::optional<endpoint_ref_t> decode(cbufptr_t* buffer) {
         std::optional<uint16_t> val0 = SimpleSerializer<uint16_t, false>::read(&(buffer->begin()), buffer->end());
         std::optional<uint16_t> val1 = SimpleSerializer<uint16_t, false>::read(&(buffer->begin()), buffer->end());
-        return (val0.has_value() && val1.has_value()) ? std::make_optional(endpoint_ref_t{val1.value(), val0.value()}) : std::nullopt;
+        return (val0.has_value() && val1.has_value()) ? std::make_optional(endpoint_ref_t{*val1, *val0}) : std::nullopt;
     }
     static bool encode(endpoint_ref_t value, bufptr_t* buffer) {
         return SimpleSerializer<uint16_t, false>::write(value.endpoint_id, &(buffer->begin()), buffer->end())
@@ -270,7 +270,7 @@ struct Property {
     T exchange(std::optional<T> value) const {
         T old_value = (*getter_)(ctx_);
         if (value.has_value()) {
-            (*setter_)(ctx_, value.value());
+            (*setter_)(ctx_, *value);
         }
         return old_value;
     }

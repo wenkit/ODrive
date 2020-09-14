@@ -5,13 +5,14 @@
 # Prerequisites:
 #  Ubuntu: libusb-dev
 
+$(error unsupported platform)
 
 ifeq ($(OS),Windows_NT)
 	target = windows
     ifeq ($(PROCESSOR_ARCHITEW6432),AMD64)
     	outname = libfibre-windows-amd64.dll
     else
-        error("unsupported platform")
+        $(error unsupported platform)
     endif
 else ifeq ($(shell uname -s),Linux)
 	target = linux
@@ -20,14 +21,14 @@ else ifeq ($(shell uname -s),Linux)
 	else ifeq (($(shell uname -m),armv7l)
 		outname = libfibre-linux-armhf.so
 	else
-		error("unsupported platform")
+		$(error unsupported platform)
 	endif
 else ifeq ($(shell uname -s),Darwin)
 	target = macos
 	ifeq ($(shell uname -m),x86_64)
 		outname = libfibre-macos-amd64.so
 	else
-		error("unsupported platform")
+		$(error unsupported platform)
 	endif
 endif
 
